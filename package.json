@@ -35,14 +35,14 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@prisma/client": "^7.3.0",
+    "@prisma/client": "^6.19.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "prisma": "^7.3.0",
+    "prisma": "^6.19.2",
     "typescript": "^5"
   }
 }
