@@ -80,8 +80,10 @@ setInterval(() => {
 function getCommand(language: string, filePath: string): { cmd: string; args: string[] } {
     switch (language) {
         case "javascript": return { cmd: "node", args: ["--no-warnings", filePath] };
-        case "typescript": return { cmd: "npx", args: ["tsx", filePath] };
+        case "typescript": return { cmd: "npx", args: ["--no-install", "tsx", filePath] };
         case "python": return { cmd: "python3", args: ["-u", filePath] };
+        case "html": return { cmd: "echo", args: ["HTML execution is not supported. Please download and view in a browser."] };
+        case "css": return { cmd: "echo", args: ["CSS execution is not supported. Please download and view in a browser."] };
         default: return { cmd: "node", args: ["--no-warnings", filePath] };
     }
 }
@@ -91,6 +93,8 @@ function getFileExtension(language: string): string {
         case "javascript": return ".js";
         case "typescript": return ".ts";
         case "python": return ".py";
+        case "html": return ".html";
+        case "css": return ".css";
         default: return ".js";
     }
 }
