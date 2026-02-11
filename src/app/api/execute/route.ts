@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-    // Code execution is temporarily disabled in production due to a build issue with 'tsx' dependency analysis in Next.js 16
-    // TODO: Re-enable once the turbopack/tsx interaction is resolved.
-    return NextResponse.json(
-        {
-            output: "",
-            error: "Code execution is currently disabled in this environment.",
-            exitCode: 1,
-            timedOut: false
-        },
-        { status: 503 }
-    );
+    try {
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL; // e.g. https://server.com
+        if (!socketUrl) {
+            return NextResponse.json(
+                { error: "Code execution service not configured (NEXT_PUBLIC_SOCKET_URL missing)" },
+                { status: 503 }
+            );
+        }
+
+        const body = await req.json();
+
+        // forward to backend
+        const response = await fetch(`${socketUrl}/execute`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
+
+    } catch (e: any) {
+        console.error("Exec proxy error:", e);
+        return NextResponse.json(
+            { error: `Execution service unavailable: ${e.message}` },
+            { status: 502 }
+        );
+    }
 }

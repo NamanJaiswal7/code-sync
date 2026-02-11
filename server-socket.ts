@@ -44,13 +44,147 @@ function log(message: string, ...args: any[]) {
     console.log(`[${ts}] ${message}`, ...args);
 }
 
-const httpServer = createServer((req, res) => {
-    // Basic health check endpoint
+// --- Code Execution Logic ---
+import { execFile } from "child_process";
+import { writeFile, unlink, mkdtemp } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+
+const TIMEOUT_MS = 10_000;
+const MAX_OUTPUT_BYTES = 50 * 1024;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+const requestLog = new Map<string, number[]>();
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const timestamps = requestLog.get(ip) || [];
+    const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    requestLog.set(ip, recent);
+    if (recent.length >= RATE_LIMIT_MAX) return true;
+    recent.push(now);
+    return false;
+}
+
+// rate limit cleanup
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, timestamps] of requestLog.entries()) {
+        const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+        if (recent.length === 0) requestLog.delete(ip);
+        else requestLog.set(ip, recent);
+    }
+}, 5 * 60_000);
+
+function getCommand(language: string, filePath: string): { cmd: string; args: string[] } {
+    switch (language) {
+        case "javascript": return { cmd: "node", args: ["--no-warnings", filePath] };
+        case "typescript": return { cmd: "npx", args: ["tsx", filePath] };
+        case "python": return { cmd: "python3", args: ["-u", filePath] };
+        default: return { cmd: "node", args: ["--no-warnings", filePath] };
+    }
+}
+
+function getFileExtension(language: string): string {
+    switch (language) {
+        case "javascript": return ".js";
+        case "typescript": return ".ts";
+        case "python": return ".py";
+        default: return ".js";
+    }
+}
+
+function truncateOutput(str: string): string {
+    if (Buffer.byteLength(str, "utf-8") > MAX_OUTPUT_BYTES) {
+        return str.slice(0, MAX_OUTPUT_BYTES) + "\n\n--- output truncated ---";
+    }
+    return str;
+}
+
+const httpServer = createServer(async (req, res) => {
+    // CORS
+    res.setHeader("Access-Control-Allow-Origin", dev ? "*" : allowedOrigins[0] || "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+        res.writeHead(200);
+        res.end();
+        return;
+    }
+
     if (req.url === "/health" || req.url === "/") {
         res.writeHead(200);
         res.end("Socket server is running");
         return;
     }
+
+    if (req.url === "/execute" && req.method === "POST") {
+        let body = "";
+        req.on("data", chunk => body += chunk);
+        req.on("end", async () => {
+            try {
+                const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+
+                if (process.env.DISABLE_CODE_EXEC === "true") {
+                    res.writeHead(403, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ error: "Execution disabled" }));
+                    return;
+                }
+
+                if (isRateLimited(ip)) {
+                    res.writeHead(429, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ error: "Rate limit exceeded" }));
+                    return;
+                }
+
+                const { code, language } = JSON.parse(body);
+                if (!code || !language) {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ error: "Missing code or language" }));
+                    return;
+                }
+
+                const tempDir = await mkdtemp(join(tmpdir(), "code-exec-"));
+                const ext = getFileExtension(language);
+                const filePath = join(tempDir, `script${ext}`);
+                await writeFile(filePath, code, "utf-8");
+
+                const { cmd, args } = getCommand(language, filePath);
+
+                const result = await new Promise((resolve) => {
+                    execFile(cmd, args, {
+                        timeout: TIMEOUT_MS,
+                        maxBuffer: MAX_OUTPUT_BYTES * 2,
+                        cwd: tempDir,
+                        env: { ...process.env, NODE_NO_WARNINGS: "1" }
+                    }, (error, stdout, stderr) => {
+                        unlink(filePath).catch(() => { });
+                        if (error?.killed) {
+                            resolve({ output: truncateOutput(stdout || ""), error: "Timed out", exitCode: null, timedOut: true });
+                        } else {
+                            resolve({
+                                output: truncateOutput(stdout || ""),
+                                error: truncateOutput(stderr || ""),
+                                exitCode: error ? (error as any).code ?? 1 : 0,
+                                timedOut: false
+                            });
+                        }
+                    });
+                });
+
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify(result));
+            } catch (e: any) {
+                console.error("Exec error", e);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
     res.writeHead(404);
     res.end();
 });
