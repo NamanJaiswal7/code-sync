@@ -8,6 +8,7 @@ Real-time collaborative code editor with live cursor tracking and sync. Built ov
 - **Live cursor tracking** - See where other users are typing with colored cursors and name labels
 - **Conflict resolution** - OT-based conflict resolution handles concurrent edits
 - **Autosave** - Changes are automatically saved with debouncing (2s delay)
+- **Code Execution** - Run JavaScript, TypeScript, and Python code directly in the browser (sandboxed)
 - **Multi-language support** - JavaScript, TypeScript, Python, HTML, CSS syntax highlighting
 - **Session management** - Simple auth with persistent sessions via localStorage
 
@@ -46,6 +47,21 @@ npm run dev
 ```
 
 The app will be running at [http://localhost:3000](http://localhost:3000).
+
+### Docker Deployment
+
+You can also run the app using Docker Compose:
+
+```bash
+# configure environment variables
+cp .env.example .env
+
+# start the services
+docker compose up -d
+
+# view logs
+docker compose logs -f
+```
 
 ### How to use
 
@@ -97,7 +113,14 @@ The server keeps the last 100 operations in memory for transformation. In produc
 - In-memory document state (would need Redis for horizontal scaling)
 - No file system / multi-file support yet
 - Undo/redo across collaborative sessions can be wonky
+- **Code Execution**: Currently disabled in production builds due to a build tool issue. Works in development mode.
 
-## License
+## Environment Variables
 
-MIT
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | - |
+| `NEXTAUTH_SECRET` | Secret for auth (any string) | - |
+| `NEXTAUTH_URL` | URL of the app | `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `*` (dev) |
+| `DISABLE_CODE_EXEC` | Set to `true` to disable code execution | `false` |

@@ -75,6 +75,14 @@ export interface ClientToServerEvents {
     "document:save": (data: { documentId: string; content: string; version: number }) => void;
 }
 
+export interface InterServerEvents {
+    // empty for now
+}
+
+export interface SocketData {
+    // empty for now
+}
+
 export const SUPPORTED_LANGUAGES = [
     { id: "javascript", label: "JavaScript", ext: ".js" },
     { id: "typescript", label: "TypeScript", ext: ".ts" },

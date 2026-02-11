@@ -1,4 +1,4 @@
-import { TextOperation, DocumentOperation } from "./types";
+import { TextOperation, DocumentOperation, DocumentState } from "./types";
 
 /**
  * basic OT engine for collaborative text editing
@@ -206,4 +206,14 @@ export class ServerDocumentState {
 
         return { transformed, newContent, newVersion };
     }
+}
+
+export function createDocumentState(content: string, version: number): DocumentState {
+    return {
+        id: "", // caller should set this
+        title: "",
+        language: "javascript",
+        content,
+        version,
+    };
 }

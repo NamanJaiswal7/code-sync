@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: code_editor
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/code_editor?schema=public"
+      NEXTAUTH_SECRET: "change-me-in-production"
+      NEXTAUTH_URL: "http://localhost:3000"
+      PORT: "3000"
+      # ALLOWED_ORIGINS: "https://yourdomain.com"
+      # DISABLE_CODE_EXEC: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    # push schema on first run
+    command: >
+      sh -c "npx prisma db push --skip-generate && npx tsx server.ts"
+
+volumes:
+  pgdata:

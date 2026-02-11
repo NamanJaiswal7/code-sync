@@ -14,12 +14,22 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
 
+// parse allowed origins from env, fall back to localhost in dev
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim())
+    : [`http://localhost:${port}`];
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // in-memory doc state - good enough for now, would use redis in prod
 const documentStates = new Map<string, ServerDocumentState>();
 const roomUsers = new Map<string, Map<string, UserPresence>>();
+
+function log(message: string, ...args: any[]) {
+    const ts = new Date().toISOString();
+    console.log(`[${ts}] ${message}`, ...args);
+}
 
 app.prepare().then(() => {
     const httpServer = createServer((req, res) => {
@@ -31,7 +41,7 @@ app.prepare().then(() => {
         httpServer,
         {
             cors: {
-                origin: "*", // TODO: lock this down for prod
+                origin: dev ? "*" : allowedOrigins,
                 methods: ["GET", "POST"],
             },
             // increase max buffer for large docs

@@ -50,7 +50,10 @@ export function useSocket({
     const onAckRef = useRef<((data: { version: number; opId: string }) => void) | null>(null);
 
     useEffect(() => {
-        const socket: AppSocket = io({
+        // connect to standalone socket server if URL is provided, otherwise fallback to same origin
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+
+        const socket: AppSocket = io(socketUrl, {
             transports: ["websocket", "polling"],
             reconnection: true,
             reconnectionDelay: 1000,

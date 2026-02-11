@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "next build",
-    "start": "NODE_ENV=production tsx server.ts",
+    "start": "next start",
+    "start:socket": "tsx server-socket.ts",
+    "start:all": "concurrently \"npm run start\" \"npm run start:socket\"",
     "lint": "eslint",
     "db:push": "npx prisma db push",
     "db:generate": "npx prisma generate",
@@ -31,10 +33,10 @@
     "react-dom": "19.2.3",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "tsx": "^4.21.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "@prisma/client": "^6.19.2",
     "@types/node": "^20",
     "@types/react": "^19",
