@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import PresenceBar from "@/components/PresenceBar";
+import OutputPanel from "@/components/OutputPanel";
 import { useSocket } from "@/hooks/useSocket";
 import { useAutosave } from "@/hooks/useAutosave";
 import { DocumentOperation } from "@/lib/types";
@@ -24,6 +25,20 @@ export default function EditorPage() {
     const [language, setLanguage] = useState("javascript");
     const [version, setVersion] = useState(0);
     const [copied, setCopied] = useState(false);
+
+    // code execution state
+    const [isRunning, setIsRunning] = useState(false);
+    const [execOutput, setExecOutput] = useState("");
+    const [execError, setExecError] = useState("");
+    const [execExitCode, setExecExitCode] = useState<number | null>(null);
+    const [execTimedOut, setExecTimedOut] = useState(false);
+    const [showOutput, setShowOutput] = useState(false);
+    const contentRef = useRef(content);
+
+    // keep content ref in sync so runCode always has latest
+    useEffect(() => {
+        contentRef.current = content;
+    }, [content]);
 
     // grab user from localStorage
     const [user, setUser] = useState<{ id: string; name: string; email: string; avatarColor: string } | null>(null);
@@ -127,6 +142,43 @@ export default function EditorPage() {
         setTimeout(() => setCopied(false), 2000);
     }
 
+    async function runCode() {
+        if (isRunning) return;
+
+        setIsRunning(true);
+        setExecOutput("");
+        setExecError("");
+        setExecExitCode(null);
+        setExecTimedOut(false);
+        setShowOutput(true);
+
+        try {
+            const res = await fetch("/api/execute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: contentRef.current, language }),
+            });
+
+            const data = await res.json();
+            setExecOutput(data.output || "");
+            setExecError(data.error || "");
+            setExecExitCode(data.exitCode);
+            setExecTimedOut(data.timedOut || false);
+        } catch (err: any) {
+            setExecError(`Failed to execute: ${err.message}`);
+            setExecExitCode(1);
+        } finally {
+            setIsRunning(false);
+        }
+    }
+
+    function clearOutput() {
+        setExecOutput("");
+        setExecError("");
+        setExecExitCode(null);
+        setExecTimedOut(false);
+    }
+
     if (loading || !user) {
         return (
             <div className="loading-screen">
@@ -173,39 +225,74 @@ export default function EditorPage() {
                         </button>
                     </span>
                 </div>
-                <button className="btn-ghost btn-sm" onClick={saveNow}>
-                    Save now
-                </button>
+                <div className="toolbar-right">
+                    <button
+                        className={`run-btn ${isRunning ? "run-btn-running" : ""}`}
+                        onClick={runCode}
+                        disabled={isRunning}
+                        title="Run code (executes on server)"
+                    >
+                        {isRunning ? (
+                            <>
+                                <span className="run-spinner" />
+                                Running…
+                            </>
+                        ) : (
+                            <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                Run
+                            </>
+                        )}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={saveNow}>
+                        Save now
+                    </button>
+                </div>
             </div>
 
-            <div className="editor-main">
-                <Editor
-                    initialContent={content}
-                    language={language}
-                    documentId={documentId}
-                    userId={user.id}
-                    version={version}
-                    users={users}
-                    onOperation={sendOperation}
-                    onCursorUpdate={sendCursorUpdate}
-                    onContentChange={(c) => {
-                        setContent(c);
-                        setVersion((v) => v + 1);
-                    }}
-                    onRemoteOperation={
-                        onOperationRef
-                            ? (cb: (op: DocumentOperation) => void) => {
-                                onOperationRef.current = cb;
-                            }
-                            : undefined
-                    }
-                    onAck={
-                        onAckRef
-                            ? (cb: (data: { version: number; opId: string }) => void) => {
-                                onAckRef.current = cb;
-                            }
-                            : undefined
-                    }
+            <div className={`editor-main ${showOutput ? "editor-main-split" : ""}`}>
+                <div className="editor-pane">
+                    <Editor
+                        initialContent={content}
+                        language={language}
+                        documentId={documentId}
+                        userId={user.id}
+                        version={version}
+                        users={users}
+                        onOperation={sendOperation}
+                        onCursorUpdate={sendCursorUpdate}
+                        onContentChange={(c) => {
+                            setContent(c);
+                            setVersion((v) => v + 1);
+                        }}
+                        onRemoteOperation={
+                            onOperationRef
+                                ? (cb: (op: DocumentOperation) => void) => {
+                                    onOperationRef.current = cb;
+                                }
+                                : undefined
+                        }
+                        onAck={
+                            onAckRef
+                                ? (cb: (data: { version: number; opId: string }) => void) => {
+                                    onAckRef.current = cb;
+                                }
+                                : undefined
+                        }
+                    />
+                </div>
+
+                <OutputPanel
+                    output={execOutput}
+                    error={execError}
+                    isRunning={isRunning}
+                    timedOut={execTimedOut}
+                    exitCode={execExitCode}
+                    visible={showOutput}
+                    onClear={clearOutput}
+                    onClose={() => setShowOutput(false)}
                 />
             </div>
         </div>
